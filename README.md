@@ -12,6 +12,8 @@ So I took a different approach. You rigidly mount a Vive tracker to your headset
 
 ## Calibration Guide
 
+https://github.com/user-attachments/assets/de458fa9-3029-4aca-95d1-5753ce6602a9
+
 1. Mount a rigid tracker to your headset.
 2. Hit **Calibrate**. It goes through a few stages, and the on-screen text tells you what it wants at each one:
     - First it asks you to **move your head around** so it can spot which tracker is the one mounted to your head.
