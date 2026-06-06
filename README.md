@@ -38,6 +38,10 @@ You need to re-center your headset tracking while rotating around in a circle ti
 
 This can cause SLAM devices to drift, and this is *by design* so, please re-calibrate if that happens, however note this should never happen during active usage.
 
+## TODO
+
+- Add checkbox to turn the headset into true lighthouse tracked device, this is currently omitted for UX reasons
+
 ## License
 
 Commits up to and including `1cc0583` are MIT (see [`LICENSE.MIT`](LICENSE.MIT)). Everything after is GPLv3 (see [`LICENSE`](LICENSE)).
