@@ -63,6 +63,8 @@ static void ParseProfile(CalibrationContext &ctx, std::istream &stream)
 	else
 		ctx.calibratedScale = 1.0;
 
+	ctx.enableNative = obj["native"].get<bool>();
+
 	if (obj["rel_qw"].is<double>())
 	{
 		ctx.relativeRotation.w = obj["rel_qw"].get<double>();
@@ -128,6 +130,7 @@ static void WriteProfile(CalibrationContext &ctx, std::ostream &out)
 	profile["y"].set<double>(ctx.calibratedTranslation(1));
 	profile["z"].set<double>(ctx.calibratedTranslation(2));
 	profile["scale"].set<double>(ctx.calibratedScale);
+	profile["native"].set<bool>(ctx.enableNative);
 
 	if (ctx.validRelativeOffset)
 	{

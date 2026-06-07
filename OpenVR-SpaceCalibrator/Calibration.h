@@ -41,6 +41,8 @@ struct CalibrationContext
 	double timeLastTick = 0, timeLastScan = 0;
 	double wantedUpdateInterval = 1.0;
 
+	bool enableNative = false;
+
 	enum Speed
 	{
 		FAST = 0,

@@ -70,7 +70,7 @@ Function .onInit
     StrCmp $R0 "" done
 
     MessageBox MB_YESNOCANCEL|MB_ICONQUESTION \
-        "${APP_NAME} is already installed.$\n$\nClick YES to Repair$\nClick NO to Remove$\nClick CANCEL to abort installation" \
+        "${APP_NAME} is already installed.$\n$\nClick YES to Reinstall$\nClick NO to Remove$\nClick CANCEL to abort installation" \
         IDYES repair \
         IDNO remove
     Abort

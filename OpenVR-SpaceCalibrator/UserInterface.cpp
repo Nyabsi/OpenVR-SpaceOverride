@@ -97,6 +97,8 @@ void BuildMenu(bool runningInOverlay)
 			}
 		}
 
+		ImGui::Checkbox("Disable HMD Alignment", &CalCtx.enableNative);
+
 		width = ImGui::GetWindowContentRegionWidth();
 		scale = 1.0f;
 		if (CalCtx.chaperone.valid)

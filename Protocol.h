@@ -67,6 +67,7 @@ namespace protocol
 		uint32_t hmdID;
 		uint32_t trackerID;
 		bool enabled;
+		bool native;
 		vr::HmdQuaternion_t offsetRotation;
 		vr::HmdVector3d_t offsetTranslation;
 		vr::HmdQuaternion_t calibrationRotation;
