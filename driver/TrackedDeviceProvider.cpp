@@ -1,12 +1,12 @@
-#include "ServerTrackedDeviceProvider.h"
+#include "TrackedDeviceProvider.h"
 #include "Logging.h"
 #include "InterfaceHookInjector.h"
 
 #include <cmath>
 
-vr::EVRInitError ServerTrackedDeviceProvider::Init(vr::IVRDriverContext *pDriverContext)
+vr::EVRInitError TrackedDeviceProvider::Init(vr::IVRDriverContext *pDriverContext)
 {
-	TRACE("ServerTrackedDeviceProvider::Init()");
+	TRACE("TrackedDeviceProvider::Init()");
 	VR_INIT_SERVER_DRIVER_CONTEXT(pDriverContext);
 
 	memset(transforms, 0, vr::k_unMaxTrackedDeviceCount * sizeof DeviceTransform);
@@ -17,9 +17,9 @@ vr::EVRInitError ServerTrackedDeviceProvider::Init(vr::IVRDriverContext *pDriver
 	return vr::VRInitError_None;
 }
 
-void ServerTrackedDeviceProvider::Cleanup()
+void TrackedDeviceProvider::Cleanup()
 {
-	TRACE("ServerTrackedDeviceProvider::Cleanup()");
+	TRACE("TrackedDeviceProvider::Cleanup()");
 	server.Stop();
 	DisableHooks();
 	VR_CLEANUP_SERVER_DRIVER_CONTEXT();
@@ -66,7 +66,7 @@ inline vr::HmdQuaternion_t HmdQuaternion_FromMatrix(const T& matrix)
 	return q;
 }
 
-void ServerTrackedDeviceProvider::SetDeviceTransform(const protocol::SetDeviceTransform &newTransform)
+void TrackedDeviceProvider::SetDeviceTransform(const protocol::SetDeviceTransform &newTransform)
 {
 	auto &tf = transforms[newTransform.openVRID];
 	tf.enabled = newTransform.enabled;
@@ -81,7 +81,7 @@ void ServerTrackedDeviceProvider::SetDeviceTransform(const protocol::SetDeviceTr
 		tf.scale = newTransform.scale;
 }
 
-void ServerTrackedDeviceProvider::SetHmdTracker(const protocol::SetHmdTracker &cmd)
+void TrackedDeviceProvider::SetHmdTracker(const protocol::SetHmdTracker &cmd)
 {
 	hmdTracker.enabled = cmd.enabled;
 	hmdTracker.native = cmd.native;
@@ -95,7 +95,7 @@ void ServerTrackedDeviceProvider::SetHmdTracker(const protocol::SetHmdTracker &c
 	hmdTracker.calibrationTranslation = cmd.calibrationTranslation;
 }
 
-bool ServerTrackedDeviceProvider::HandleDevicePoseUpdated(uint32_t openVRID, vr::DriverPose_t &pose)
+bool TrackedDeviceProvider::HandleDevicePoseUpdated(uint32_t openVRID, vr::DriverPose_t &pose)
 {
 	auto &tf = transforms[openVRID];
 	if (tf.enabled && !hmdTracker.native)

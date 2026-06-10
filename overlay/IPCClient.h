@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Protocol.h"
+#include <shared/Protocol.h>
 
 class IPCClient
 {
