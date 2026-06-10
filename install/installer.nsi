@@ -6,8 +6,8 @@
 ;--------------------------------
 ; General Configuration
 
-!define APP_VERSION "2.1.0"
-!define APP_VERSION_META "2.1.0.0"
+!define APP_VERSION "2.3.0"
+!define APP_VERSION_META "2.3.0.0"
 !define APP_NAME "OpenVR-SpaceOverride"
 
 !define INSTALL_DIR "$PROGRAMFILES64\${APP_NAME}"
