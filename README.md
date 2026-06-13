@@ -28,7 +28,7 @@ This puts the headset and all your other lighthouse devices on the same tracking
 1. Mount a rigid tracker to your headset.
 2. Hit **Calibrate**. It goes through a few stages, and the on-screen text tells you what it wants at each one:
     - First it asks you to **move your head around** so it can spot which tracker is the one mounted to your head.
-    - Then it calibrates. *Look left, Look center, Look right, Look up, Look center.*
+    - Then it calibrates. *Look left, Look center, Look right, Look center, Look up, Look center.*
 3. That's it. The profile saves on its own and the override stays running in the background.
 
 > [!TIP]
