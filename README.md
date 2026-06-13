@@ -4,15 +4,6 @@ OpenVR-SpaceOverride aligns SLAM-tracked headsets (Pico, Galaxy XR and similar) 
 
 This puts the headset and all your other lighthouse devices on the same tracking system, so there's nothing left to drift against. The SLAM tracking is still there underneath, you just get proper alignment on top of it.
 
-> [!NOTE]
-> This is a personal project, I do not accept contributions, pull requests or issues. Reach out to me in e-mail `nyabsi@sovellus.cc` if you have issues.
-
-> [!WARNING]
-> Use a Vive Tracker 3.0 (or equivalent rigid, well-tracking device). **Tundra Trackers are unusable with this project.** Their tracking is too jittery, and since the tracker drives your entire headset pose, that jitter goes straight into your view. See the [FAQ](#faq) for details.
-
-> [!IMPORTANT]
-> Due to the unexpected rapid explosion in popularity, this project may have issues and bugs that have been consistently reported to me, and these are being worked on. I work on this in my free time alongside a full-time job, thanks for your understanding.
-
 ## Requirements
 
 - Lighthouse system (or other equivalent)
@@ -30,6 +21,9 @@ This puts the headset and all your other lighthouse devices on the same tracking
 | Display Port powered SLAM devices | ✅ Works | Such as: Pimax, PSVR2, HP Reverb G2, etc. |
 
 ## Calibration Guide
+
+> [!WARNING]
+> If you're using Virtual Desktop, please ensure **Stage Tracking** is disabled in the settings, this is required for the software to function in the expected way.
 
 1. Mount a rigid tracker to your headset.
 2. Hit **Calibrate**. It goes through a few stages, and the on-screen text tells you what it wants at each one:
