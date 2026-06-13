@@ -36,7 +36,7 @@ https://github.com/user-attachments/assets/de458fa9-3029-4aca-95d1-5753ce6602a9
 1. Mount a rigid tracker to your headset.
 2. Hit **Calibrate**. It goes through a few stages, and the on-screen text tells you what it wants at each one:
     - First it asks you to **move your head around** so it can spot which tracker is the one mounted to your head.
-    - Then it calibrates. Keep moving, walking in a circle while bobbing your head slightly, until it's done.
+    - Then it calibrates. *Look left, Look center, Look right, Look up, Look center.*
 3. That's it. The profile saves on its own and the override stays running in the background.
 
 > [!TIP]
@@ -45,6 +45,9 @@ https://github.com/user-attachments/assets/de458fa9-3029-4aca-95d1-5753ce6602a9
 Once it's calibrated, the headset is driven entirely by the tracker, so if you don't need the SLAM devices you can disable the headset's own tracking too. This also means the override works fine with your headset set to 3DoF mode or with its positional tracking disabled.
 
 ## Native Override Mode
+
+> [!CAUTION]
+> Please **DO NOT** use this, unless you understand how to do a manual TrackingOverride, this is meant for **advanced** users and not for your average person, you should not have *any* reason to use this, unless you *know* what you are doing.
 
 Native Override feeds the raw tracker data, with the corrected offset applied, directly to the headset. This makes the headset behave as a truly native lighthouse device. The trade-off is yaw misalignment: the tracker's projection is different from your headset's, which is also why local space tracking is required.
 
