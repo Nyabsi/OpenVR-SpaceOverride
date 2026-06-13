@@ -1,4 +1,4 @@
-OpenVR-SpaceCalibrator Special Edition
+OpenVR-SpaceOverride
 Copyright (C) 2026 Nyabsi
 
 This program is free software: you can redistribute it and/or modify

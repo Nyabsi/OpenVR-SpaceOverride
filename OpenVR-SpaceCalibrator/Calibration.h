@@ -9,8 +9,7 @@ enum class CalibrationState
 	None,
 	Begin,
 	Detect,
-	Rotation,
-	Translation,
+	Sampling,
 	Editing,
 };
 
@@ -27,10 +26,6 @@ struct CalibrationContext
 	vr::HmdVector3d_t relativeTranslation = { 0, 0, 0 };
 	bool validRelativeOffset = false;
 
-	vr::HmdMatrix34_t offsetRefRaw = {};
-	vr::HmdMatrix34_t offsetTargetRaw = {};
-	bool haveOffsetSample = false;
-
 	std::string targetTrackingSystem;
 
 	std::string hmdSerial;
@@ -44,6 +39,7 @@ struct CalibrationContext
 	bool enableNative = false;
 	bool fallbackToSlam = true;
 	bool disableAngularVelocity = false;
+	bool continuousSync = true;
 	float predictionTime = 1.0f;
 
 	enum Speed
@@ -78,12 +74,12 @@ struct CalibrationContext
 		relativeRotation = { 1, 0, 0, 0 };
 		relativeTranslation = { 0, 0, 0 };
 		validRelativeOffset = false;
-		haveOffsetSample = false;
 		targetTrackingSystem = "";
 		hmdSerial = "";
 		trackerSerial = "";
 		enabled = false;
 		validProfile = false;
+		continuousSync = true;
 	}
 
 	size_t SampleCount()

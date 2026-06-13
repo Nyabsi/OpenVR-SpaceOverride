@@ -6,15 +6,21 @@
 #include <cstring>
 #include <openvr_driver.h>
 
-OPENVRSPACECALIBRATORDRIVER_API void *HmdDriverFactory(const char *pInterfaceName, int *pReturnCode)
+#ifdef _WIN32
+#define EXPORT_FUNC extern "C" __declspec(dllexport)
+#else
+#define EXPORT_FUNC extern "C"
+#endif
+
+ServerTrackedDeviceProvider g_server;
+
+EXPORT_FUNC void* HmdDriverFactory(const char *pInterfaceName, int *pReturnCode)
 {
 	TRACE("HmdDriverFactory(%s)", pInterfaceName);
 
-	static ServerTrackedDeviceProvider server;
-
 	if (std::strcmp(vr::IServerTrackedDeviceProvider_Version, pInterfaceName) == 0)
 	{
-		return &server;
+		return &g_server;
 	}
 
 	if (pReturnCode)

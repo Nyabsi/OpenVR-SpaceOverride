@@ -2,39 +2,42 @@
 #include "Hooking.h"
 #include "InterfaceHookInjector.h"
 #include "ServerTrackedDeviceProvider.h"
+#include "OpenVR-SpaceCalibratorDriver.h"
 
-static ServerTrackedDeviceProvider *Driver = nullptr;
-
-static Hook<void*(*)(vr::IVRDriverContext *, const char *, vr::EVRInitError *)> 
+static Hook<void*(*)(void*, const char *, vr::EVRInitError *)>
 	GetGenericInterfaceHook("IVRDriverContext::GetGenericInterface");
 
-static Hook<void(*)(vr::IVRServerDriverHost *, uint32_t, const vr::DriverPose_t &, uint32_t)>
+static Hook<void(*)(void*, uint32_t, const vr::DriverPose_t &, uint32_t)>
 	TrackedDevicePoseUpdatedHook005("IVRServerDriverHost005::TrackedDevicePoseUpdated");
 
-static Hook<void(*)(vr::IVRServerDriverHost *, uint32_t, const vr::DriverPose_t &, uint32_t)>
+static Hook<void(*)(void*, uint32_t, const vr::DriverPose_t &, uint32_t)>
 	TrackedDevicePoseUpdatedHook006("IVRServerDriverHost006::TrackedDevicePoseUpdated");
 
-static void DetourTrackedDevicePoseUpdated005(vr::IVRServerDriverHost *_this, uint32_t unWhichDevice, const vr::DriverPose_t &newPose, uint32_t unPoseStructSize)
+static void DetourTrackedDevicePoseUpdated005(void* *_this, uint32_t unWhichDevice, const vr::DriverPose_t &newPose, uint32_t unPoseStructSize)
 {
+	if (sizeof(vr::DriverPose_t) != unPoseStructSize)
+		return;
 	//TRACE("ServerTrackedDeviceProvider::DetourTrackedDevicePoseUpdated(%d)", unWhichDevice);
 	auto pose = newPose;
-	if (Driver->HandleDevicePoseUpdated(unWhichDevice, pose))
+	if (g_server.HandleDevicePoseUpdated(unWhichDevice, pose))
 	{
 		TrackedDevicePoseUpdatedHook005.originalFunc(_this, unWhichDevice, pose, unPoseStructSize);
 	}
 }
 
-static void DetourTrackedDevicePoseUpdated006(vr::IVRServerDriverHost *_this, uint32_t unWhichDevice, const vr::DriverPose_t &newPose, uint32_t unPoseStructSize)
+static void DetourTrackedDevicePoseUpdated006(void**_this, uint32_t unWhichDevice, const vr::DriverPose_t &newPose, uint32_t unPoseStructSize)
 {
+	if (sizeof(vr::DriverPose_t) != unPoseStructSize)
+		return;
 	//TRACE("ServerTrackedDeviceProvider::DetourTrackedDevicePoseUpdated(%d)", unWhichDevice);
 	auto pose = newPose;
-	if (Driver->HandleDevicePoseUpdated(unWhichDevice, pose))
+	if (g_server.HandleDevicePoseUpdated(unWhichDevice, pose))
 	{
 		TrackedDevicePoseUpdatedHook006.originalFunc(_this, unWhichDevice, pose, unPoseStructSize);
 	}
 }
 
-static void *DetourGetGenericInterface(vr::IVRDriverContext *_this, const char *pchInterfaceVersion, vr::EVRInitError *peError)
+static void *DetourGetGenericInterface(void*_this, const char *pchInterfaceVersion, vr::EVRInitError *peError)
 {
 	TRACE("ServerTrackedDeviceProvider::DetourGetGenericInterface(%s)", pchInterfaceVersion);
 	auto originalInterface = GetGenericInterfaceHook.originalFunc(_this, pchInterfaceVersion, peError);
@@ -60,10 +63,8 @@ static void *DetourGetGenericInterface(vr::IVRDriverContext *_this, const char *
 	return originalInterface;
 }
 
-void InjectHooks(ServerTrackedDeviceProvider *driver, vr::IVRDriverContext *pDriverContext)
+void InjectHooks(vr::IVRDriverContext *pDriverContext)
 {
-	Driver = driver;
-
 	auto err = MH_Initialize();
 	if (err == MH_OK)
 	{

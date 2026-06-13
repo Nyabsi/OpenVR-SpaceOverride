@@ -13,6 +13,13 @@ void OpenLogFile()
 	}
 }
 
+void CloseLogFile()
+{
+	int result = fclose(LogFile);
+	if (result != 0)
+		std::exit(EXIT_FAILURE);
+}
+
 tm TimeForLog()
 {
 	auto now = std::chrono::system_clock::now();

@@ -7,7 +7,7 @@
 
 #include <string>
 #include <vector>
-#include <iostream>
+#include <iostream> 
 #include <algorithm>
 #include <cmath>
 
@@ -233,24 +233,32 @@ Eigen::Vector3d CalibrateRotation(const std::vector<Sample> &samples)
 	return euler;
 }
 
-Eigen::Vector3d CalibrateTranslation(const std::vector<Sample> &samples)
+Eigen::Vector3d CalibrateTranslation(const std::vector<Sample> &samples, const Eigen::Matrix3d &rotation)
 {
 	std::vector<std::pair<Eigen::Vector3d, Eigen::Matrix3d>> deltas;
 
 	for (size_t i = 0; i < samples.size(); i++)
 	{
+		Sample s_i = samples[i];
+		s_i.target.rot = rotation * s_i.target.rot;
+		s_i.target.trans = rotation * s_i.target.trans;
+
 		for (size_t j = 0; j < i; j++)
 		{
-			auto QAi = samples[i].ref.rot.transpose();
-			auto QAj = samples[j].ref.rot.transpose();
+			Sample s_j = samples[j];
+			s_j.target.rot = rotation * s_j.target.rot;
+			s_j.target.trans = rotation * s_j.target.trans;
+
+			auto QAi = s_i.ref.rot.transpose();
+			auto QAj = s_j.ref.rot.transpose();
 			auto dQA = QAj - QAi;
-			auto CA = QAj * (samples[j].ref.trans - samples[j].target.trans) - QAi * (samples[i].ref.trans - samples[i].target.trans);
+			auto CA = QAj * (s_j.ref.trans - s_j.target.trans) - QAi * (s_i.ref.trans - s_i.target.trans);
 			deltas.push_back(std::make_pair(CA, dQA));
 
-			auto QBi = samples[i].target.rot.transpose();
-			auto QBj = samples[j].target.rot.transpose();
+			auto QBi = s_i.target.rot.transpose();
+			auto QBj = s_j.target.rot.transpose();
 			auto dQB = QBj - QBi;
-			auto CB = QBj * (samples[j].ref.trans - samples[j].target.trans) - QBi * (samples[i].ref.trans - samples[i].target.trans);
+			auto CB = QBj * (s_j.ref.trans - s_j.target.trans) - QBi * (s_i.ref.trans - s_i.target.trans);
 			deltas.push_back(std::make_pair(CB, dQB));
 		}
 	}
@@ -274,6 +282,62 @@ Eigen::Vector3d CalibrateTranslation(const std::vector<Sample> &samples)
 	snprintf(buf, sizeof buf, "Calibrated translation x=%.2f y=%.2f z=%.2f\n", transcm[0], transcm[1], transcm[2]);
 	CalCtx.Log(buf);
 	return transcm;
+}
+
+static const double AxisVarianceThreshold = 0.001;
+
+static double SecondAxisVariance(const std::vector<Sample> &samples)
+{
+	std::vector<Eigen::Vector4d> points;
+	points.reserve(samples.size());
+	Eigen::Vector4d mean = Eigen::Vector4d::Zero();
+
+	for (auto &sample : samples)
+	{
+		Eigen::Quaterniond q(sample.target.rot);
+		if (q.w() < 0)
+			q.coeffs() = -q.coeffs();
+
+		Eigen::Vector4d point(q.w(), q.x(), q.y(), q.z());
+		mean += point;
+		points.push_back(point);
+	}
+
+	if (points.empty())
+		return 0.0;
+
+	mean /= (double)points.size();
+
+	Eigen::Matrix4d cov = Eigen::Matrix4d::Zero();
+	for (auto &point : points)
+	{
+		Eigen::Vector4d d = point - mean;
+		cov += d * d.transpose();
+	}
+	cov /= (double)points.size();
+
+	Eigen::SelfAdjointEigenSolver<Eigen::Matrix4d> solver(cov);
+	return solver.eigenvalues()(1);
+}
+
+static Eigen::Vector3d ComputeRefToTargetOffset(const std::vector<Sample> &samples, const Eigen::Matrix3d &calRot, const Eigen::Vector3d &calTrans)
+{
+	Eigen::Vector3d accum = Eigen::Vector3d::Zero();
+
+	for (auto &sample : samples)
+		accum += sample.ref.rot.transpose() * (calRot * sample.target.trans + calTrans - sample.ref.trans);
+
+	return accum / (double)samples.size();
+}
+
+static double RetargetingErrorRMS(const std::vector<Sample> &samples, const Eigen::Vector3d &hmdToTargetPos, const Eigen::Matrix3d &calRot, const Eigen::Vector3d &calTrans)
+{
+	double accum = 0;
+
+	for (auto &sample : samples)
+		accum += (calRot * sample.target.trans + calTrans - (sample.ref.rot * hmdToTargetPos + sample.ref.trans)).squaredNorm();
+
+	return std::sqrt(accum / (double)samples.size());
 }
 
 Sample CollectSample(const CalibrationContext &ctx)
@@ -364,37 +428,46 @@ void SendHmdTrackerCommand(uint32_t hmdID, uint32_t trackerID, bool enabled)
 	Driver.SendBlocking(req);
 }
 
-void ComputeRelativeOffset(CalibrationContext &ctx)
+// https://stackoverflow.com/questions/12374087/average-of-multiple-quaternions/27410865
+void ComputeRelativeOffset(CalibrationContext &ctx, const std::vector<Sample> &samples, const Eigen::Matrix3d &calRot, const Eigen::Vector3d &calTrans)
 {
-	if (!ctx.haveOffsetSample)
+	if (samples.empty())
 		return;
 
-	Eigen::Vector3d eulerRad = ctx.calibratedRotation * EIGEN_PI / 180.0;
-	Eigen::Matrix3d rotC =
-		(Eigen::AngleAxisd(eulerRad(0), Eigen::Vector3d::UnitZ()) *
-		 Eigen::AngleAxisd(eulerRad(1), Eigen::Vector3d::UnitY()) *
-		 Eigen::AngleAxisd(eulerRad(2), Eigen::Vector3d::UnitX())).toRotationMatrix();
-	Eigen::Vector3d transC = ctx.calibratedTranslation * 0.01;
+	Eigen::Matrix4d quatAccum = Eigen::Matrix4d::Zero();
+	Eigen::Vector3d transAccum = Eigen::Vector3d::Zero();
 
-	Pose hmd(ctx.offsetRefRaw);
-	Pose tracker(ctx.offsetTargetRaw);
+	for (auto &sample : samples)
+	{
+		Eigen::Matrix3d trackerRot = calRot * sample.target.rot;
+		Eigen::Vector3d trackerTrans = calRot * sample.target.trans + calTrans;
 
-	Eigen::Matrix3d trackerRot = rotC * tracker.rot;
-	Eigen::Vector3d trackerTrans = rotC * tracker.trans + transC;
+		Eigen::Matrix3d offsetRot = trackerRot.transpose() * sample.ref.rot;
+		Eigen::Vector3d offsetTrans = trackerRot.transpose() * (sample.ref.trans - trackerTrans);
 
-	Eigen::Matrix3d offsetRot = trackerRot.transpose() * hmd.rot;
-	Eigen::Vector3d offsetTrans = trackerRot.transpose() * (hmd.trans - trackerTrans);
+		Eigen::Quaterniond q(offsetRot);
+		Eigen::Vector4d v(q.w(), q.x(), q.y(), q.z());
+		quatAccum += v * v.transpose();
+		transAccum += offsetTrans;
+	}
 
-	Eigen::Quaterniond q(offsetRot);
+	Eigen::SelfAdjointEigenSolver<Eigen::Matrix4d> solver(quatAccum);
+	Eigen::Vector4d avg = solver.eigenvectors().col(3).normalized();
+
+	Eigen::Quaterniond q(avg(0), avg(1), avg(2), avg(3));
 	q.normalize();
+	if (q.w() < 0)
+		q.coeffs() = -q.coeffs();
+
+	transAccum /= (double)samples.size();
 
 	ctx.relativeRotation.w = q.w();
 	ctx.relativeRotation.x = q.x();
 	ctx.relativeRotation.y = q.y();
 	ctx.relativeRotation.z = q.z();
-	ctx.relativeTranslation.v[0] = offsetTrans.x();
-	ctx.relativeTranslation.v[1] = offsetTrans.y();
-	ctx.relativeTranslation.v[2] = offsetTrans.z();
+	ctx.relativeTranslation.v[0] = transAccum.x();
+	ctx.relativeTranslation.v[1] = transAccum.y();
+	ctx.relativeTranslation.v[2] = transAccum.z();
 	ctx.validRelativeOffset = true;
 }
 
@@ -465,7 +538,31 @@ void ScanAndApplyProfile(CalibrationContext &ctx)
 		}
 	}
 
-	if (ctx.enabled && ctx.validRelativeOffset && ctx.targetID != vr::k_unTrackedDeviceIndexInvalid)
+	bool overrideActive = ctx.enabled && ctx.validRelativeOffset && ctx.targetID != vr::k_unTrackedDeviceIndexInvalid;
+
+	for (uint32_t id = 0; overrideActive && id < vr::k_unMaxTrackedDeviceCount; ++id)
+	{
+		auto deviceClass = vr::VRSystem()->GetTrackedDeviceClass(id);
+		if (deviceClass == vr::TrackedDeviceClass_Invalid)
+			continue;
+
+		bool sync = ctx.continuousSync
+			&& id != vr::k_unTrackedDeviceIndex_Hmd
+			&& deviceClass != vr::TrackedDeviceClass_TrackingReference;
+
+		if (sync)
+		{
+			vr::ETrackedPropertyError err = vr::TrackedProp_Success;
+			vr::VRSystem()->GetStringTrackedDeviceProperty(id, vr::Prop_TrackingSystemName_String, buffer, vr::k_unMaxPropertyStringSize, &err);
+			sync = err == vr::TrackedProp_Success && std::string(buffer) != ctx.targetTrackingSystem;
+		}
+
+		protocol::Request req(protocol::RequestSetSlamSync);
+		req.setSlamSync = { id, sync };
+		Driver.SendBlocking(req);
+	}
+
+	if (overrideActive)
 	{
 		SendHmdTrackerCommand(vr::k_unTrackedDeviceIndex_Hmd, ctx.targetID, true);
 	}
@@ -488,7 +585,7 @@ void ScanAndApplyProfile(CalibrationContext &ctx)
 	}
 }
 
-static void BeginRotationPhase(CalibrationContext &ctx, uint32_t targetID)
+static void BeginSamplingPhase(CalibrationContext &ctx, uint32_t targetID)
 {
 	ctx.targetID = targetID;
 	ctx.targetTrackingSystem = GetDeviceTrackingSystem(targetID);
@@ -500,13 +597,15 @@ static void BeginRotationPhase(CalibrationContext &ctx, uint32_t targetID)
 	ctx.Log(buf);
 
 	ResetAndDisableOffsets(targetID);
-	ctx.haveOffsetSample = false;
 	SendHmdTrackerCommand(vr::k_unTrackedDeviceIndex_Hmd, vr::k_unTrackedDeviceIndexInvalid, false);
 
-	ctx.state = CalibrationState::Rotation;
+	ctx.state = CalibrationState::Sampling;
 	ctx.wantedUpdateInterval = 0.0;
 	ctx.Log("Starting calibration...\n");
 }
+
+static std::vector<Sample> collectedSamples;
+static int coplanarRetries = 0;
 
 void StartCalibration()
 {
@@ -514,6 +613,19 @@ void StartCalibration()
 	CalCtx.wantedUpdateInterval = 0.0;
 	CalCtx.messages.clear();
 	Detection.Clear();
+	collectedSamples.clear();
+	coplanarRetries = 0;
+}
+
+static void AbortAndRestoreProfile(CalibrationContext &ctx)
+{
+	if (ctx.targetID != vr::k_unTrackedDeviceIndexInvalid)
+		ResetAndDisableOffsets(ctx.targetID);
+
+	LoadProfile(ctx);
+	ctx.state = CalibrationState::None;
+	collectedSamples.clear();
+	coplanarRetries = 0;
 }
 
 void CalibrationTick(double time)
@@ -587,7 +699,7 @@ void CalibrationTick(double time)
 		if (Detection.candidates.size() == 1)
 		{
 			ctx.targetID = Detection.candidates[0];
-			BeginRotationPhase(ctx, Detection.candidates[0]);
+			BeginSamplingPhase(ctx, Detection.candidates[0]);
 			return;
 		}
 
@@ -666,7 +778,7 @@ void CalibrationTick(double time)
 
 		uint32_t targetID = Detection.candidates[bestIdx];
 		Detection.Clear();
-		BeginRotationPhase(ctx, targetID);
+		BeginSamplingPhase(ctx, targetID);
 		return;
 	}
 
@@ -676,49 +788,65 @@ void CalibrationTick(double time)
 		return;
 	}
 
-	static std::vector<Sample> samples;
+	auto &samples = collectedSamples;
 	samples.push_back(sample);
 
 	CalCtx.Progress(samples.size(), CalCtx.SampleCount());
 
-	if (samples.size() == CalCtx.SampleCount())
+	if (samples.size() >= CalCtx.SampleCount())
 	{
 		CalCtx.Log("\n");
-		if (ctx.state == CalibrationState::Rotation)
+
+		double axisVariance = SecondAxisVariance(samples);
+		if (axisVariance < AxisVarianceThreshold)
 		{
-			ctx.offsetRefRaw = ctx.devicePoses[0].mDeviceToAbsoluteTracking;
-			ctx.offsetTargetRaw = ctx.devicePoses[ctx.targetID].mDeviceToAbsoluteTracking;
-			ctx.haveOffsetSample = true;
+			if (++coplanarRetries >= 10)
+			{
+				CalCtx.Log("Not enough rotation variety after several attempts, aborting calibration! Previous calibration restored.\n");
+				AbortAndRestoreProfile(ctx);
+				return;
+			}
 
-			ctx.calibratedRotation = CalibrateRotation(samples);
-
-			auto vrRotQuat = VRRotationQuat(ctx.calibratedRotation);
-
-			protocol::Request req(protocol::RequestSetDeviceTransform);
-			req.setDeviceTransform = { ctx.targetID, true, vrRotQuat };
-			Driver.SendBlocking(req);
-
-			ctx.state = CalibrationState::Translation;
+			char buf[256];
+			snprintf(buf, sizeof buf, "Head movement is too uniform (axis variance %.5f), tilt and turn your head in different directions! Collecting more samples...\n", axisVariance);
+			CalCtx.Log(buf);
+			samples.erase(samples.begin(), samples.begin() + samples.size() / 4);
+			return;
 		}
-		else if (ctx.state == CalibrationState::Translation)
+		coplanarRetries = 0;
+
+		ctx.calibratedRotation = CalibrateRotation(samples);
+
+		Eigen::Vector3d eulerRad = ctx.calibratedRotation * EIGEN_PI / 180.0;
+		Eigen::Matrix3d calRot =
+			(Eigen::AngleAxisd(eulerRad(0), Eigen::Vector3d::UnitZ()) *
+			 Eigen::AngleAxisd(eulerRad(1), Eigen::Vector3d::UnitY()) *
+			 Eigen::AngleAxisd(eulerRad(2), Eigen::Vector3d::UnitX())).toRotationMatrix();
+
+		ctx.calibratedTranslation = CalibrateTranslation(samples, calRot);
+		Eigen::Vector3d calTransM = ctx.calibratedTranslation * 0.01;
+
+		Eigen::Vector3d hmdToTarget = ComputeRefToTargetOffset(samples, calRot, calTransM);
+		double rmsError = RetargetingErrorRMS(samples, hmdToTarget, calRot, calTransM);
+
+		char buf[256];
+		snprintf(buf, sizeof buf, "Calibration residual error (RMS): %.1f mm\n", rmsError * 1000.0);
+		CalCtx.Log(buf);
+
+		if (rmsError > 0.1)
 		{
-			ctx.calibratedTranslation = CalibrateTranslation(samples);
-
-			auto vrTrans = VRTranslationVec(ctx.calibratedTranslation);
-
-			protocol::Request req(protocol::RequestSetDeviceTransform);
-			req.setDeviceTransform = { ctx.targetID, true, vrTrans };
-			Driver.SendBlocking(req);
-
-			ComputeRelativeOffset(ctx);
-
-			ctx.validProfile = true;
-			SaveProfile(ctx);
-			CalCtx.Log("Finished calibration, profile saved\n");
-
-			ctx.state = CalibrationState::None;
+			CalCtx.Log("Calibration quality is too low, aborting! Previous calibration restored. Try again with a slower calibration speed, moving smoothly.\n");
+			AbortAndRestoreProfile(ctx);
+			return;
 		}
 
+		ComputeRelativeOffset(ctx, samples, calRot, calTransM);
+
+		ctx.validProfile = true;
+		SaveProfile(ctx);
+		CalCtx.Log("Finished calibration, profile saved\n");
+
+		ctx.state = CalibrationState::None;
 		samples.clear();
 	}
 }

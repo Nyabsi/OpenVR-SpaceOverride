@@ -6,8 +6,8 @@
 ;--------------------------------
 ; General Configuration
 
-!define APP_VERSION "2.3.0"
-!define APP_VERSION_META "2.3.0.0"
+!define APP_VERSION "2.4.0"
+!define APP_VERSION_META "2.4.0.0"
 !define APP_NAME "OpenVR-SpaceOverride"
 
 !define INSTALL_DIR "$PROGRAMFILES64\${APP_NAME}"
@@ -105,7 +105,7 @@ Section "Install" SecInstall
 
     File "${FILES_DIR}\LICENSE.txt"
 	File "${FILES_DIR}\LICENSE"
-	File "${FILES_DIR}\LICENSE.MIT"
+	File "${FILES_DIR}\LICENSES"
 	File "${FILES_DIR}\manifest.vrmanifest"
     File "${FILES_DIR}\OpenVR-SpaceOverride.exe"
     File "${FILES_DIR}\openvr_api.dll"
@@ -122,7 +122,13 @@ Section "Install" SecInstall
 
     CreateShortCut "$SMPROGRAMS\${APP_NAME}.lnk" "$INSTDIR\OpenVR-SpaceOverride.exe"
 
-    ExecWait '"C:\\Program Files (x86)\\Steam\\steamapps\\common\\SteamVR\\bin\\win64\\vrpathreg.exe" adddriver "$INSTDIR\\driver"'
+    Var /GLOBAL vrRuntimePath
+	nsExec::ExecToStack '"$INSTDIR\OpenVR-SpaceOverride.exe" -openvrpath'
+	Pop $0
+	Pop $vrRuntimePath
+	DetailPrint "VR runtime path: $vrRuntimePath"
+
+    ExecWait '"$vrRuntimePath\bin\win64\vrpathreg.exe" adddriver "$INSTDIR\driver"'
 
 	SetOutPath "$INSTDIR"
 	nsExec::ExecToLog '"$INSTDIR\OpenVR-SpaceOverride.exe" -installmanifest'
@@ -140,7 +146,7 @@ Section "Uninstall"
 
     Delete "$INSTDIR\LICENSE.txt"
 	Delete "$INSTDIR\LICENSE"
-	Delete "$INSTDIR\LICENSE.MIT"
+	Delete "$INSTDIR\LICENSES"
 	Delete "$INSTDIR\manifest.vrmanifest"
     Delete "$INSTDIR\OpenVR-SpaceOverride.exe"
     Delete "$INSTDIR\openvr_api.dll"
@@ -153,6 +159,12 @@ Section "Uninstall"
 
     RMDir "$INSTDIR"
 
-    ExecWait '"C:\\Program Files (x86)\\Steam\\steamapps\\common\\SteamVR\\bin\\win64\\vrpathreg.exe" removedriver "$INSTDIR\\driver"'
+    Var /GLOBAL vrRuntimePath2
+	nsExec::ExecToStack '"$INSTDIR\OpenVR-SpaceOverride.exe" -openvrpath'
+	Pop $0
+	Pop $vrRuntimePath2
+	DetailPrint "VR runtime path: $vrRuntimePath"
+
+    ExecWait '"$vrRuntimePath2\bin\win64\vrpathreg.exe" removedriver "$INSTDIR\driver"'
 
 SectionEnd

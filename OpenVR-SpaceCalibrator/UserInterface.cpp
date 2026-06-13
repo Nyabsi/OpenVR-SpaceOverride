@@ -83,6 +83,13 @@ void BuildMainWindow(bool runningInOverlay)
 			ImGui::SetItemTooltip(
 				"Disables angular velocity reporting, as it may cause issues with some devices.");
 
+			ImGui::Checkbox("Continuous Space Sync", &CalCtx.continuousSync);
+			ImGui::SetItemTooltip(
+				"Continuously re-aligns SLAM-tracked devices (controllers etc.) to the calibrated space\n"
+				"in the background. The headset's raw SLAM pose is compared against the tracker-driven\n"
+				"pose to measure SLAM drift, and the correction is applied gradually and automatically.\n"
+				"Only SLAM devices are affected - the HMD and lighthouse devices are never touched.");
+
 			ImGui::Text("Prediction Time");
 			ImGui::SameLine();
 			ImGui::SliderFloat("##prediction_time", &CalCtx.predictionTime, 0.0f, 10.0f, "%.1f");
@@ -90,6 +97,7 @@ void BuildMainWindow(bool runningInOverlay)
 			ImGui::SetItemTooltip(
 				"How many frames of prediction SteamVR applies to the tracker.\n"
 				"Some wireless solutions may need more prediction to feel smooth.");
+
 			ImGui::EndTabItem();
 		}
 
@@ -268,7 +276,9 @@ void BuildStatus(const VRState &state)
 	else if (!CalCtx.enabled)
 		ImGui::TextColored(ImColor(0.8f, 0.2f, 0.2f), "Override disabled (HMD tracking system changed?)");
 	else
+	{
 		ImGui::TextColored(ImColor(0.2f, 0.7f, 0.2f), "Override active: HMD driven by %s (%s)", tracker->serial.c_str(), tracker->trackingSystem.c_str());
+	}
 }
 
 VRState LoadVRState()

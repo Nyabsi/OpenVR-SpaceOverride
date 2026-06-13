@@ -235,8 +235,7 @@ void RunLoop()
 			}
 		}
 
-
-		ImGui_ImplGlfw_SetReadMouseFromGlfw(!dashboardVisible);
+		ImGui_ImplGlfw_SetReadMouseFromGlfw(false);
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui_ImplOpenVR_NewFrame();

@@ -38,9 +38,14 @@ public:
 	ServerTrackedDeviceProvider() : server(this) { }
 	void SetDeviceTransform(const protocol::SetDeviceTransform &newTransform);
 	void SetHmdTracker(const protocol::SetHmdTracker &cmd);
+	void SetSlamSync(const protocol::SetSlamSync &cmd);
 	bool HandleDevicePoseUpdated(uint32_t openVRID, vr::DriverPose_t &pose);
 
 private:
+	void UpdateDrift(const vr::HmdQuaternion_t &correctedRotation, const double (&correctedPosition)[3],
+		const vr::HmdQuaternion_t &rawRotation, const double (&rawPosition)[3]);
+	void ApplyDrift(vr::DriverPose_t &pose) const;
+
 	IPCServer server;
 
 	struct DeviceTransform
@@ -67,4 +72,17 @@ private:
 		vr::HmdQuaternion_t calibrationRotation = { 1, 0, 0, 0 };
 		vr::HmdVector3d_t calibrationTranslation = { 0, 0, 0 };
 	} hmdTracker;
+
+	bool slamSync[vr::k_unMaxTrackedDeviceCount];
+
+	struct DriftCorrection
+	{
+		enum Level { TINY = 0, SMALL = 1, LARGE = 2 };
+
+		bool valid = false;
+		int level = TINY;
+		vr::HmdQuaternion_t rotation = { 1, 0, 0, 0 };
+		vr::HmdVector3d_t translation = { 0, 0, 0 };
+		LARGE_INTEGER lastUpdate = {};
+	} drift;
 };

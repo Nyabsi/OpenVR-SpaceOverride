@@ -6,6 +6,8 @@
 extern FILE *LogFile;
 
 void OpenLogFile();
+void CloseLogFile();
+
 tm TimeForLog();
 void LogFlush();
 

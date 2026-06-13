@@ -10,7 +10,7 @@
 
 namespace protocol
 {
-	const uint32_t Version = 3;
+	const uint32_t Version = 4;
 
 	enum RequestType
 	{
@@ -18,6 +18,7 @@ namespace protocol
 		RequestHandshake,
 		RequestSetDeviceTransform,
 		RequestSetHmdTracker,
+		RequestSetSlamSync,
 	};
 
 	enum ResponseType
@@ -77,6 +78,14 @@ namespace protocol
 		vr::HmdVector3d_t calibrationTranslation;
 	};
 
+	// Marks a device as living in the HMD's (SLAM) tracking space, so the driver
+	// continuously re-aligns it to the calibrated space as the SLAM tracking drifts.
+	struct SetSlamSync
+	{
+		uint32_t openVRID;
+		bool enabled;
+	};
+
 	struct Request
 	{
 		RequestType type;
@@ -84,6 +93,7 @@ namespace protocol
 		union {
 			SetDeviceTransform setDeviceTransform;
 			SetHmdTracker setHmdTracker;
+			SetSlamSync setSlamSync;
 		};
 
 		Request() : type(RequestInvalid) { }
