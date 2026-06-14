@@ -4,6 +4,9 @@ OpenVR-SpaceOverride aligns SLAM-tracked headsets (Pico, Galaxy XR and similar) 
 
 This puts the headset and all your other lighthouse devices on the same tracking system, so there's nothing left to drift against. The SLAM tracking is still there underneath, you just get proper alignment on top of it.
 
+> [!NOTE]
+> If you find bugs or issues, let me know over e-mail at `nyabsi@sovellus.cc` I will be responding to you when I have time.
+
 ## Requirements
 
 - Lighthouse system (or other equivalent)
