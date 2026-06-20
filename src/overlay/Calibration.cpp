@@ -218,9 +218,20 @@ Eigen::Vector3d CalibrateRotation(const std::vector<Sample> &samples)
 	return euler;
 }
 
-Eigen::Vector3d CalibrateTranslation(const std::vector<Sample> &samples, const Eigen::Matrix3d &rotation)
+// TODO: move this shit out when refactored
+static const double MinCalibratedScale = 0.9;
+static const double MaxCalibratedScale = 1.1;
+
+struct TransScaleConstraint
 {
-	std::vector<std::pair<Eigen::Vector3d, Eigen::Matrix3d>> deltas;
+	Eigen::Matrix3d dQ;
+	Eigen::Vector3d g;
+	Eigen::Vector3d rhs;
+};
+
+Eigen::Vector3d CalibrateTranslation(const std::vector<Sample> &samples, const Eigen::Matrix3d &rotation, double &outScale)
+{
+	std::vector<TransScaleConstraint> deltas;
 
 	for (size_t i = 0; i < samples.size(); i++)
 	{
@@ -236,35 +247,52 @@ Eigen::Vector3d CalibrateTranslation(const std::vector<Sample> &samples, const E
 
 			auto QAi = s_i.ref.rot.transpose();
 			auto QAj = s_j.ref.rot.transpose();
-			auto dQA = QAj - QAi;
-			auto CA = QAj * (s_j.ref.trans - s_j.target.trans) - QAi * (s_i.ref.trans - s_i.target.trans);
-			deltas.push_back(std::make_pair(CA, dQA));
+			deltas.push_back({
+				QAj - QAi,
+				QAj * s_j.target.trans - QAi * s_i.target.trans,
+				QAj * s_j.ref.trans - QAi * s_i.ref.trans
+			});
 
 			auto QBi = s_i.target.rot.transpose();
 			auto QBj = s_j.target.rot.transpose();
-			auto dQB = QBj - QBi;
-			auto CB = QBj * (s_j.ref.trans - s_j.target.trans) - QBi * (s_i.ref.trans - s_i.target.trans);
-			deltas.push_back(std::make_pair(CB, dQB));
+			deltas.push_back({
+				QBj - QBi,
+				QBj * s_j.target.trans - QBi * s_i.target.trans,
+				QBj * s_j.ref.trans - QBi * s_i.ref.trans
+			});
 		}
 	}
 
 	Eigen::VectorXd constants(deltas.size() * 3);
-	Eigen::MatrixXd coefficients(deltas.size() * 3, 3);
+	Eigen::MatrixXd coefficients(deltas.size() * 3, 4);
 
 	for (size_t i = 0; i < deltas.size(); i++)
 	{
 		for (int axis = 0; axis < 3; axis++)
 		{
-			constants(i * 3 + axis) = deltas[i].first(axis);
-			coefficients.row(i * 3 + axis) = deltas[i].second.row(axis);
+			coefficients.block<1, 3>(i * 3 + axis, 0) = deltas[i].dQ.row(axis);
+			coefficients(i * 3 + axis, 3) = deltas[i].g(axis);
+			constants(i * 3 + axis) = deltas[i].rhs(axis);
 		}
 	}
 
-	Eigen::Vector3d trans = coefficients.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(constants);
-	auto transcm = trans * 100.0;
+	Eigen::Vector4d solution = coefficients.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(constants);
+	Eigen::Vector3d trans = solution.head<3>();
+	double scale = solution(3);
 
 	char buf[256];
-	snprintf(buf, sizeof buf, "Calibrated translation x=%.2f y=%.2f z=%.2f\n", transcm[0], transcm[1], transcm[2]);
+	if (scale < MinCalibratedScale || scale > MaxCalibratedScale)
+	{
+		snprintf(buf, sizeof buf, "Estimated scale %.4f out of range [%.2f, %.2f], using 1.0 (check tracking quality)\n",
+			scale, MinCalibratedScale, MaxCalibratedScale);
+		CalCtx.Log(buf);
+		scale = 1.0;
+	}
+	outScale = scale;
+
+	auto transcm = trans * 100.0;
+
+	snprintf(buf, sizeof buf, "Calibrated translation x=%.2f y=%.2f z=%.2f scale=%.4f\n", transcm[0], transcm[1], transcm[2], outScale);
 	CalCtx.Log(buf);
 	return transcm;
 }
@@ -305,22 +333,22 @@ static double SecondAxisVariance(const std::vector<Sample> &samples)
 	return solver.eigenvalues()(1);
 }
 
-static Eigen::Vector3d ComputeRefToTargetOffset(const std::vector<Sample> &samples, const Eigen::Matrix3d &calRot, const Eigen::Vector3d &calTrans)
+static Eigen::Vector3d ComputeRefToTargetOffset(const std::vector<Sample> &samples, const Eigen::Matrix3d &calRot, const Eigen::Vector3d &calTrans, double calScale)
 {
 	Eigen::Vector3d accum = Eigen::Vector3d::Zero();
 
 	for (auto &sample : samples)
-		accum += sample.ref.rot.transpose() * (calRot * sample.target.trans + calTrans - sample.ref.trans);
+		accum += sample.ref.rot.transpose() * (calScale * calRot * sample.target.trans + calTrans - sample.ref.trans);
 
 	return accum / (double)samples.size();
 }
 
-static double RetargetingErrorRMS(const std::vector<Sample> &samples, const Eigen::Vector3d &hmdToTargetPos, const Eigen::Matrix3d &calRot, const Eigen::Vector3d &calTrans)
+static double RetargetingErrorRMS(const std::vector<Sample> &samples, const Eigen::Vector3d &hmdToTargetPos, const Eigen::Matrix3d &calRot, const Eigen::Vector3d &calTrans, double calScale)
 {
 	double accum = 0;
 
 	for (auto &sample : samples)
-		accum += (calRot * sample.target.trans + calTrans - (sample.ref.rot * hmdToTargetPos + sample.ref.trans)).squaredNorm();
+		accum += (calScale * calRot * sample.target.trans + calTrans - (sample.ref.rot * hmdToTargetPos + sample.ref.trans)).squaredNorm();
 
 	return std::sqrt(accum / (double)samples.size());
 }
@@ -431,7 +459,7 @@ void SendHmdTrackerCommand(uint32_t hmdID, uint32_t trackerID, bool enabled)
 }
 
 // https://stackoverflow.com/questions/12374087/average-of-multiple-quaternions/27410865
-void ComputeRelativeOffset(CalibrationContext &ctx, const std::vector<Sample> &samples, const Eigen::Matrix3d &calRot, const Eigen::Vector3d &calTrans)
+void ComputeRelativeOffset(CalibrationContext &ctx, const std::vector<Sample> &samples, const Eigen::Matrix3d &calRot, const Eigen::Vector3d &calTrans, double calScale)
 {
 	if (samples.empty())
 		return;
@@ -442,7 +470,7 @@ void ComputeRelativeOffset(CalibrationContext &ctx, const std::vector<Sample> &s
 	for (auto &sample : samples)
 	{
 		Eigen::Matrix3d trackerRot = calRot * sample.target.rot;
-		Eigen::Vector3d trackerTrans = calRot * sample.target.trans + calTrans;
+		Eigen::Vector3d trackerTrans = calScale * calRot * sample.target.trans + calTrans;
 
 		Eigen::Matrix3d offsetRot = trackerRot.transpose() * sample.ref.rot;
 		Eigen::Vector3d offsetTrans = trackerRot.transpose() * (sample.ref.trans - trackerTrans);
@@ -828,11 +856,11 @@ void CalibrationTick(double time)
 			 Eigen::AngleAxisd(eulerRad(1), Eigen::Vector3d::UnitY()) *
 			 Eigen::AngleAxisd(eulerRad(2), Eigen::Vector3d::UnitX())).toRotationMatrix();
 
-		ctx.calibratedTranslation = CalibrateTranslation(samples, calRot);
+		ctx.calibratedTranslation = CalibrateTranslation(samples, calRot, ctx.calibratedScale);
 		Eigen::Vector3d calTransM = ctx.calibratedTranslation * 0.01;
 
-		Eigen::Vector3d hmdToTarget = ComputeRefToTargetOffset(samples, calRot, calTransM);
-		double rmsError = RetargetingErrorRMS(samples, hmdToTarget, calRot, calTransM);
+		Eigen::Vector3d hmdToTarget = ComputeRefToTargetOffset(samples, calRot, calTransM, ctx.calibratedScale);
+		double rmsError = RetargetingErrorRMS(samples, hmdToTarget, calRot, calTransM, ctx.calibratedScale);
 
 		char buf[256];
 		snprintf(buf, sizeof buf, "Calibration residual error (RMS): %.1f mm\n", rmsError * 1000.0);
@@ -846,7 +874,7 @@ void CalibrationTick(double time)
 			return;
 		}
 
-		ComputeRelativeOffset(ctx, samples, calRot, calTransM);
+		ComputeRelativeOffset(ctx, samples, calRot, calTransM, ctx.calibratedScale);
 
 		ctx.validProfile = true;
 		SaveProfile(ctx);
