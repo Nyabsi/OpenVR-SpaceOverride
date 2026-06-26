@@ -99,4 +99,17 @@ private:
 
 		void reset() { valid = false; rotationFilter.reset(); translationFilter.reset(); }
 	} headFilter;
+
+	// Estimates the reported head's angular velocity by differentiating the output
+	// orientation, so vecAngularVelocity is always in the runtime's expected driver-world
+	// frame regardless of how the source tracker reports its own angular velocity.
+	struct HeadVelocity
+	{
+		bool valid = false;
+		LARGE_INTEGER lastUpdate = {};
+		vr::HmdQuaternion_t prevRotation = { 1, 0, 0, 0 };
+		oneeuro::Vec3 filter;
+
+		void reset() { valid = false; filter.reset(); }
+	} headVel;
 };

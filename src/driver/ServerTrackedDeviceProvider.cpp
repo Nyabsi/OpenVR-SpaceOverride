@@ -43,6 +43,25 @@ inline vr::HmdQuaternion_t quaternionProjectYaw(const vr::HmdQuaternion_t& q) {
 	return { q.w / n, 0.0, q.y / n, 0.0 };
 }
 
+// World-frame angular velocity (axis-angle, rad/s) that carries 'prev' to 'cur' over dt.
+// Derived from the orientation we actually output, so it is in the same (driver-world)
+// frame DriverPose_t::vecAngularVelocity expects, independent of however the source
+// device reports its own angular velocity.
+inline vr::HmdVector3d_t quaternionAngularVelocity(const vr::HmdQuaternion_t& cur, const vr::HmdQuaternion_t& prev, double dt) {
+	if (dt <= 0.0)
+		return { 0, 0, 0 };
+
+	vr::HmdQuaternion_t d = quaternionNormalize(cur * quaternionConjugate(prev));
+	if (d.w < 0.0) { d.w = -d.w; d.x = -d.x; d.y = -d.y; d.z = -d.z; }
+
+	double s = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+	if (s < 1e-9)
+		return { 0, 0, 0 };
+
+	double scale = (2.0 * std::atan2(s, d.w)) / (s * dt);
+	return { d.x * scale, d.y * scale, d.z * scale };
+}
+
 template < class T >
 inline vr::HmdQuaternion_t HmdQuaternion_FromMatrix(const T& matrix)
 {
@@ -88,6 +107,7 @@ vr::EVRInitError ServerTrackedDeviceProvider::Init(vr::IVRDriverContext* pDriver
 	drift.translationFilter.params = { 3.0, 1.3, 0.6 };
 	headFilter.rotationFilter.params = { 5.0, 0.8, 1.0 };
 	headFilter.translationFilter.params = { 5.0, 0.8, 1.0 };
+	headVel.filter.params = { 8.0, 1.0, 1.0 };
 
 	InjectHooks(pDriverContext);
 	server.Run();
@@ -141,6 +161,7 @@ void ServerTrackedDeviceProvider::SetHmdTracker(const protocol::SetHmdTracker& c
 		drift.rotationFilter.reset();
 		drift.translationFilter.reset();
 		headFilter.reset();
+		headVel.reset();
 		memset(slamSync, 0, sizeof slamSync);
 	}
 }
@@ -316,21 +337,33 @@ bool ServerTrackedDeviceProvider::HandleDevicePoseUpdated(uint32_t openVRID, vr:
 				};
 
 				vr::HmdVector3d_t vel = quaternionRotateVector(hmdTracker.calibrationRotation, trackerVel);
-				vr::HmdVector3d_t angVel = quaternionRotateVector(hmdTracker.calibrationRotation, trackerAngVel);
 
-				if (hmdTracker.native) {
-					for (int i = 0; i < 3; i++)
-					{
-						pose.vecVelocity[i] = trackerVel[i];
-						pose.vecAngularVelocity[i] = hmdTracker.enableAngularVelocity ? trackerAngVel[i] : 0.0;
-					}
-				}
-				else {
-					for (int i = 0; i < 3; i++)
-					{
-						pose.vecVelocity[i] = vel.v[i];
-						pose.vecAngularVelocity[i] = hmdTracker.enableAngularVelocity ? angVel.v[i] : 0.0;
-					}
+				// Angular velocity of the head pose we actually report, obtained by
+				// differentiating the output orientation rather than trusting the tracker's
+				// own vAngularVelocity (whose frame is ambiguous and caused wrong-axis
+				// prediction). This is already in driver-world space because we zero
+				// qWorldFromDriverRotation, which is exactly what the runtime expects.
+				double dtAng = FilterStep(headVel.lastUpdate, headVel.valid);
+				vr::HmdVector3d_t headAngVel = { 0, 0, 0 };
+				if (headVel.valid)
+					headAngVel = headVel.filter.filter(quaternionAngularVelocity(pose.qRotation, headVel.prevRotation, dtAng), dtAng);
+				headVel.prevRotation = pose.qRotation;
+				headVel.valid = true;
+
+				// Transport linear velocity to the reported (eye) point: v_eye = v + w x r,
+				// where r is the tracker->eye lever arm. Reusing the head's own world-frame
+				// angular velocity keeps velocity and angular velocity describing one rigid body.
+				vr::HmdVector3d_t tangential = {
+					headAngVel.v[1] * offset.v[2] - headAngVel.v[2] * offset.v[1],
+					headAngVel.v[2] * offset.v[0] - headAngVel.v[0] * offset.v[2],
+					headAngVel.v[0] * offset.v[1] - headAngVel.v[1] * offset.v[0]
+				};
+
+				for (int i = 0; i < 3; i++)
+				{
+					double baseVel = hmdTracker.native ? trackerVel[i] : vel.v[i];
+					pose.vecVelocity[i] = baseVel + tangential.v[i];
+					pose.vecAngularVelocity[i] = hmdTracker.enableAngularVelocity ? headAngVel.v[i] : 0.0;
 				}
 
 				pose.poseIsValid = true;
@@ -359,6 +392,7 @@ bool ServerTrackedDeviceProvider::HandleDevicePoseUpdated(uint32_t openVRID, vr:
 				}
 			}
 			else {
+				headVel.reset();
 				if (!hmdTracker.slamFallback) {
 					if (hmdTracker.native) {
 						pose.qWorldFromDriverRotation = { 1, 0, 0, 0 };

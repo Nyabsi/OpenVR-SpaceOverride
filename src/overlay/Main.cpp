@@ -255,6 +255,7 @@ int main(int argc, char** argv)
                 }
                 case vr::VREvent_TrackedDeviceUserInteractionStarted:
                 {
+                    /*
                     auto activityLevel = vr::VRSystem()->GetTrackedDeviceActivityLevel(CalCtx.targetID);
                     if ((activityLevel == vr::k_EDeviceActivityLevel_UserInteraction || activityLevel == vr::k_EDeviceActivityLevel_UserInteraction_Timeout) && g_tracking_lost) {
                         if (SDL_GetTicks() - g_tracking_lost_time >= (30 * 1000)) {
@@ -267,24 +268,31 @@ int main(int argc, char** argv)
                         }
                         g_tracking_lost = false;
                     }
+                    */
                     break;
                 }
                 case vr::VREvent_TrackedDeviceUserInteractionEnded:
                 {
+                    /*
                     auto activityLevel = vr::VRSystem()->GetTrackedDeviceActivityLevel(CalCtx.targetID);
                     if (activityLevel == vr::k_EDeviceActivityLevel_Idle && CalCtx.enabled && !g_tracking_lost) {
                         g_tracking_lost = true;
                         g_tracking_lost_time = SDL_GetTicks();
                     }
+                    */
                     break;
                 }
                 case vr::VREvent_Quit:
+                    [[fallthrough]];
+                case vr::VREvent_ProcessQuit:
+                    [[fallthrough]];
+                case vr::VREvent_QuitAcknowledged:
                     [[fallthrough]];
                 case vr::VREvent_DriverRequestedQuit:
                     [[fallthrough]];
                 case vr::VREvent_RestartRequested:
                 {
-                    CalCtx.Clear();
+                    // CalCtx.Clear();
                     vr::VRSystem()->AcknowledgeQuit_Exiting();
                     g_ticking = false;
                     break;
