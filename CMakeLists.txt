@@ -80,6 +80,7 @@ add_library(driver_spaceoverride SHARED
     "src/driver/InterfaceHookInjector.cpp"
     "src/driver/Hooking.cpp"
     "src/driver/Logging.cpp"
+    "src/driver/KalmanFilter.cpp"
 )
 
 target_compile_features(driver_spaceoverride PRIVATE cxx_std_20)

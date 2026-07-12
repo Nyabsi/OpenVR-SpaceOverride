@@ -66,6 +66,21 @@ static void ParseProfile(CalibrationContext &ctx, std::istream &stream)
 	else
 		ctx.calibratedScale = 1.0;
 
+	if (obj["targetModelScale"].is<double>())
+		ctx.targetModelScale = obj["targetModelScale"].get<double>();
+	else
+		ctx.targetModelScale = ctx.calibratedScale;
+
+	if (obj["hmdScale"].is<double>())
+		ctx.hmdScale = obj["hmdScale"].get<double>();
+	else
+		ctx.hmdScale = 1.0;
+
+	if (ctx.targetModelScale <= 0.0)
+		ctx.targetModelScale = 1.0;
+	if (ctx.hmdScale <= 0.0)
+		ctx.hmdScale = 1.0;
+
 	ctx.enableNative = obj["native"].get<bool>();
 	ctx.fallbackToSlam = obj["fallbackSlam"].get<bool>();
 	ctx.enableAngularVelocity = obj["eAngVel"].get<bool>();
@@ -159,6 +174,8 @@ static void WriteProfile(CalibrationContext &ctx, std::ostream &out)
 	profile["y"].set<double>(ctx.calibratedTranslation(1));
 	profile["z"].set<double>(ctx.calibratedTranslation(2));
 	profile["scale"].set<double>(ctx.calibratedScale);
+	profile["targetModelScale"].set<double>(ctx.targetModelScale);
+	profile["hmdScale"].set<double>(ctx.hmdScale);
 
 	profile["native"].set<bool>(ctx.enableNative);
 	profile["fallbackSlam"].set<bool>(ctx.fallbackToSlam);

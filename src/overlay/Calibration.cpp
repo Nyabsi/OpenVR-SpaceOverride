@@ -8,8 +8,9 @@
 
 #include <string>
 #include <vector>
-#include <iostream> 
+#include <iostream>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 
 #include <Dense>
@@ -119,6 +120,43 @@ static std::string GetDeviceTrackingSystem(uint32_t id)
 	return std::string(system);
 }
 
+static std::string GetDeviceModelNumber(uint32_t id)
+{
+	char model[vr::k_unMaxPropertyStringSize] = {};
+	vr::VRSystem()->GetStringTrackedDeviceProperty(id, vr::Prop_ModelNumber_String, model, vr::k_unMaxPropertyStringSize);
+	return std::string(model);
+}
+
+struct ModelScaleEntry
+{
+	const char *pattern;
+	double scale;
+};
+
+static const ModelScaleEntry ModelScales[] = {
+	{ "tundra tracker",           0.9969 	},  	// Tundra Tracker
+	{ "vive tracker 3.0 mv",      1.0034 	},  	// HTC Vive Tracker 3.0
+	{ "vive tracker mv",          1.00585 	}, 		// HTC Vive Tracker 1.0 / 2018
+};
+
+static double GetLighthouseModelScale(uint32_t id)
+{
+	if (id == vr::k_unTrackedDeviceIndexInvalid) 
+		return 1.0;
+
+	std::string model = GetDeviceModelNumber(id);
+	std::transform(model.begin(), model.end(), model.begin(),
+		[](unsigned char c) { return (char)std::tolower(c); });
+
+	for (auto &entry : ModelScales)
+	{
+		if (model.find(entry.pattern) != std::string::npos)
+			return entry.scale;
+	}
+
+	return 1.0;
+}
+
 static double AngularSpeedBetween(const Eigen::Matrix3d &cur, const Eigen::Matrix3d &prev, double dt)
 {
 	Eigen::Matrix3d delta = cur * prev.transpose();
@@ -218,7 +256,11 @@ Eigen::Vector3d CalibrateRotation(const std::vector<Sample>& samples)
 	return euler;
 }
 
-Eigen::Vector3d CalibrateTranslation(const std::vector<Sample>& samples, const Eigen::Matrix3d& rotation)
+static const double ScaleSpreadThreshold = 0.1;
+static const double MinCalibratedScale = 0.9;
+static const double MaxCalibratedScale = 1.1;
+
+Eigen::Vector3d CalibrateTranslation(const std::vector<Sample>& samples, const Eigen::Matrix3d& rotation, double scale)
 {
 	std::vector<std::pair<Eigen::Vector3d, Eigen::Matrix3d>> deltas;
 
@@ -226,13 +268,13 @@ Eigen::Vector3d CalibrateTranslation(const std::vector<Sample>& samples, const E
 	{
 		Sample s_i = samples[i];
 		s_i.target.rot = rotation * s_i.target.rot;
-		s_i.target.trans = rotation * s_i.target.trans;
+		s_i.target.trans = scale * (rotation * s_i.target.trans);
 
 		for (size_t j = 0; j < i; j++)
 		{
 			Sample s_j = samples[j];
 			s_j.target.rot = rotation * s_j.target.rot;
-			s_j.target.trans = rotation * s_j.target.trans;
+			s_j.target.trans = scale * (rotation * s_j.target.trans);
 
 			auto QAi = s_i.ref.rot.transpose();
 			auto QAj = s_j.ref.rot.transpose();
@@ -267,6 +309,56 @@ Eigen::Vector3d CalibrateTranslation(const std::vector<Sample>& samples, const E
 	snprintf(buf, sizeof buf, "Calibrated translation x=%.2f y=%.2f z=%.2f\n", transcm[0], transcm[1], transcm[2]);
 	CalCtx.Log(buf);
 	return transcm;
+}
+
+static double EstimateHmdSpaceScale(const std::vector<Sample> &samples, const Eigen::Matrix3d &rotation, double targetModelScale)
+{
+	Eigen::Vector3d centroid = Eigen::Vector3d::Zero();
+	for (auto &sample : samples)
+		centroid += rotation * sample.target.trans;
+	centroid /= (double)samples.size();
+
+	double spread = 0;
+	for (auto &sample : samples)
+		spread += (rotation * sample.target.trans - centroid).squaredNorm();
+	spread = std::sqrt(spread / (double)samples.size());
+
+	char buf[256];
+	if (spread < ScaleSpreadThreshold)
+	{
+		snprintf(buf, sizeof buf, "Not enough positional movement to estimate headset scale (spread %.2f m), assuming 1\n", spread);
+		CalCtx.Log(buf);
+		return 1.0;
+	}
+
+	Eigen::MatrixXd coefficients(samples.size() * 3, 7);
+	Eigen::VectorXd constants(samples.size() * 3);
+
+	for (size_t i = 0; i < samples.size(); i++)
+	{
+		Eigen::Vector3d rotatedPos = rotation * samples[i].target.trans;
+		Eigen::Matrix3d rotatedRot = rotation * samples[i].target.rot;
+
+		coefficients.block<3, 1>(i * 3, 0) = rotatedPos;
+		coefficients.block<3, 3>(i * 3, 1) = Eigen::Matrix3d::Identity();
+		coefficients.block<3, 3>(i * 3, 4) = rotatedRot;
+		constants.segment<3>(i * 3) = samples[i].ref.trans;
+	}
+
+	Eigen::VectorXd result = coefficients.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(constants);
+	double fittedScale = result(0);
+
+	if (fittedScale < MinCalibratedScale || fittedScale > MaxCalibratedScale)
+	{
+		snprintf(buf, sizeof buf, "Fitted space scale %.5f is not plausible, assuming headset scale 1\n", fittedScale);
+		CalCtx.Log(buf);
+		return 1.0;
+	}
+
+	snprintf(buf, sizeof buf, "Fitted headset space scale relative to lighthouse: %.5f (%+.2f%%), implied absolute headset scale: %.5f\n",
+		fittedScale, (fittedScale - 1.0) * 100.0, fittedScale / targetModelScale);
+	CalCtx.Log(buf);
+	return fittedScale;
 }
 
 static const double AxisVarianceThreshold = 0.0005;
@@ -305,22 +397,22 @@ static double SecondAxisVariance(const std::vector<Sample> &samples)
 	return solver.eigenvalues()(1);
 }
 
-static Eigen::Vector3d ComputeRefToTargetOffset(const std::vector<Sample> &samples, const Eigen::Matrix3d &calRot, const Eigen::Vector3d &calTrans)
+static Eigen::Vector3d ComputeRefToTargetOffset(const std::vector<Sample> &samples, const Eigen::Matrix3d &calRot, const Eigen::Vector3d &calTrans, double calScale)
 {
 	Eigen::Vector3d accum = Eigen::Vector3d::Zero();
 
 	for (auto &sample : samples)
-		accum += sample.ref.rot.transpose() * (calRot * sample.target.trans + calTrans - sample.ref.trans);
+		accum += sample.ref.rot.transpose() * (calScale * (calRot * sample.target.trans) + calTrans - sample.ref.trans);
 
 	return accum / (double)samples.size();
 }
 
-static double RetargetingErrorRMS(const std::vector<Sample> &samples, const Eigen::Vector3d &hmdToTargetPos, const Eigen::Matrix3d &calRot, const Eigen::Vector3d &calTrans)
+static double RetargetingErrorRMS(const std::vector<Sample> &samples, const Eigen::Vector3d &hmdToTargetPos, const Eigen::Matrix3d &calRot, const Eigen::Vector3d &calTrans, double calScale)
 {
 	double accum = 0;
 
 	for (auto &sample : samples)
-		accum += (calRot * sample.target.trans + calTrans - (sample.ref.rot * hmdToTargetPos + sample.ref.trans)).squaredNorm();
+		accum += (calScale * (calRot * sample.target.trans) + calTrans - (sample.ref.rot * hmdToTargetPos + sample.ref.trans)).squaredNorm();
 
 	return std::sqrt(accum / (double)samples.size());
 }
@@ -427,11 +519,13 @@ void SendHmdTrackerCommand(uint32_t hmdID, uint32_t trackerID, bool enabled)
 	req.setHmdTracker.offsetTranslation = CalCtx.relativeTranslation;
 	req.setHmdTracker.calibrationRotation = VRRotationQuat(CalCtx.calibratedRotation);
 	req.setHmdTracker.calibrationTranslation = VRTranslationVec(CalCtx.calibratedTranslation);
+	req.setHmdTracker.calibrationScale = CalCtx.calibratedScale;
+	req.setHmdTracker.hmdScale = CalCtx.hmdScale;
 	Driver.SendBlocking(req);
 }
 
 // https://stackoverflow.com/questions/12374087/average-of-multiple-quaternions/27410865
-void ComputeRelativeOffset(CalibrationContext &ctx, const std::vector<Sample> &samples, const Eigen::Matrix3d &calRot, const Eigen::Vector3d &calTrans)
+void ComputeRelativeOffset(CalibrationContext &ctx, const std::vector<Sample> &samples, const Eigen::Matrix3d &calRot, const Eigen::Vector3d &calTrans, double calScale)
 {
 	if (samples.empty())
 		return;
@@ -442,7 +536,7 @@ void ComputeRelativeOffset(CalibrationContext &ctx, const std::vector<Sample> &s
 	for (auto &sample : samples)
 	{
 		Eigen::Matrix3d trackerRot = calRot * sample.target.rot;
-		Eigen::Vector3d trackerTrans = calRot * sample.target.trans + calTrans;
+		Eigen::Vector3d trackerTrans = calScale * (calRot * sample.target.trans) + calTrans;
 
 		Eigen::Matrix3d offsetRot = trackerRot.transpose() * sample.ref.rot;
 		Eigen::Vector3d offsetTrans = trackerRot.transpose() * (sample.ref.trans - trackerTrans);
@@ -528,13 +622,14 @@ void ScanAndApplyProfile(CalibrationContext &ctx)
 		}
 
 		if (trackingSystem == ctx.targetTrackingSystem) {
+			double deviceScale = ctx.calibratedScale * GetLighthouseModelScale(id) / ctx.targetModelScale;
 			protocol::Request req(protocol::RequestSetDeviceTransform);
 			req.setDeviceTransform = {
 				id,
 				true,
 				VRTranslationVec(ctx.calibratedTranslation),
 				VRRotationQuat(ctx.calibratedRotation),
-				ctx.calibratedScale
+				deviceScale
 			};
 			Driver.SendBlocking(req);
 		}
@@ -827,15 +922,24 @@ void CalibrationTick(double time)
 			 Eigen::AngleAxisd(eulerRad(1), Eigen::Vector3d::UnitY()) *
 			 Eigen::AngleAxisd(eulerRad(2), Eigen::Vector3d::UnitX())).toRotationMatrix();
 
-		ctx.calibratedTranslation = CalibrateTranslation(samples, calRot);
+		double calScale = 1.0;
+		ctx.calibratedScale = calScale;
+		ctx.targetModelScale = GetLighthouseModelScale(ctx.targetID);
+
+		ctx.hmdScale = EstimateHmdSpaceScale(samples, calRot, ctx.targetModelScale);
+
+		for (auto &sample : samples)
+			sample.ref.trans /= ctx.hmdScale;
+
+		ctx.calibratedTranslation = CalibrateTranslation(samples, calRot, calScale);
 		Eigen::Vector3d calTransM = ctx.calibratedTranslation * 0.01;
 
-		Eigen::Vector3d hmdToTarget = ComputeRefToTargetOffset(samples, calRot, calTransM);
-		double rmsError = RetargetingErrorRMS(samples, hmdToTarget, calRot, calTransM);
+		Eigen::Vector3d hmdToTarget = ComputeRefToTargetOffset(samples, calRot, calTransM, calScale);
+		double rmsError = RetargetingErrorRMS(samples, hmdToTarget, calRot, calTransM, calScale);
 
-		char buf[256];
-		snprintf(buf, sizeof buf, "Calibration residual error (RMS): %.1f mm\n", rmsError * 1000.0);
-		CalCtx.Log(buf);
+		char buf2[256];
+		snprintf(buf2, sizeof buf2, "Calibration residual error (RMS): %.1f mm\n", rmsError * 1000.0);
+		CalCtx.Log(buf2);
 
 		// TODO: this is an problem for future considering automatic calibration fixing.
 		if (rmsError > 0.1)
@@ -845,7 +949,7 @@ void CalibrationTick(double time)
 			return;
 		}
 
-		ComputeRelativeOffset(ctx, samples, calRot, calTransM);
+		ComputeRelativeOffset(ctx, samples, calRot, calTransM, calScale);
 
 		ctx.validProfile = true;
 		SaveProfile(ctx);

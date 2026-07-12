@@ -12,7 +12,7 @@
 
 namespace protocol
 {
-	const uint32_t Version = 5;
+	const uint32_t Version = 7;
 
 	enum RequestType
 	{
@@ -79,6 +79,9 @@ namespace protocol
 		vr::HmdVector3d_t offsetTranslation;
 		vr::HmdQuaternion_t calibrationRotation;
 		vr::HmdVector3d_t calibrationTranslation;
+		double calibrationScale;
+		// Headset tracking space scale relative to the head tracker's lighthouse space.
+		double hmdScale;
 	};
 
 	struct SetSlamSync

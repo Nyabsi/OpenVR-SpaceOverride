@@ -217,8 +217,12 @@ void UserInterface::Render(bool runningInOverlay)
 				ImGui::InputDouble("##Z", &CalCtx.calibratedTranslation(2), 1.0, 10.0, "%.8f");
 
 				textWithWidth("ScaleLabel", "Scale", width);
+				ImGui::SameLine();
+				textWithWidth("HmdScaleLabel", "HMD Scale", width);
 
 				ImGui::InputDouble("##Scale", &CalCtx.calibratedScale, 0.0001, 0.01, "%.8f");
+				ImGui::SameLine();
+				ImGui::InputDouble("##HmdScale", &CalCtx.hmdScale, 0.0001, 0.01, "%.8f");
 				ImGui::PopItemWidth();
 
 				if (ImGui::Button("Save Profile", ImVec2(ImGui::GetContentRegionAvail().x, ImGui::GetTextLineHeight() * 2)))

@@ -4,6 +4,7 @@
 
 #include "IPCServer.h"
 #include "OneEuroFilter.h"
+#include "KalmanFilter.h"
 
 #include <openvr_driver.h>
 
@@ -49,6 +50,12 @@ private:
 		const vr::HmdQuaternion_t &rawRotation, const double (&rawPosition)[3]);
 	void ApplyDrift(vr::DriverPose_t &pose) const;
 
+	double SlamToCorrectedScale() const
+	{
+		double k = hmdTracker.hmdScale > 0.0 ? 1.0 / hmdTracker.hmdScale : 1.0;
+		return hmdTracker.native ? k : k * hmdTracker.calibrationScale;
+	}
+
 	IPCServer server;
 
 	struct DeviceTransform
@@ -74,6 +81,8 @@ private:
 		vr::HmdVector3d_t offsetTranslation = { 0, 0, 0 };
 		vr::HmdQuaternion_t calibrationRotation = { 1, 0, 0, 0 };
 		vr::HmdVector3d_t calibrationTranslation = { 0, 0, 0 };
+		double calibrationScale = 1.0;
+		double hmdScale = 1.0;
 	} hmdTracker;
 
 	bool slamSync[vr::k_unMaxTrackedDeviceCount];
@@ -99,6 +108,12 @@ private:
 
 		void reset() { valid = false; rotationFilter.reset(); translationFilter.reset(); }
 	} headFilter;
+
+	struct TrackerFilter
+	{
+		KalmanFilterXYZ translation;
+		void reset() { translation.reset(); }
+	} trackerFilter;
 
 	struct HeadVelocity
 	{

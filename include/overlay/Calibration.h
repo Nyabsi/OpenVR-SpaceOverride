@@ -26,7 +26,9 @@ struct CalibrationContext
 
 	Eigen::Vector3d calibratedRotation;
 	Eigen::Vector3d calibratedTranslation;
-	double calibratedScale;
+	double calibratedScale = 1.0;
+	double targetModelScale = 1.0;
+	double hmdScale = 1.0;
 
 	vr::HmdQuaternion_t relativeRotation = { 1, 0, 0, 0 };
 	vr::HmdVector3d_t relativeTranslation = { 0, 0, 0 };
@@ -83,6 +85,8 @@ struct CalibrationContext
 		calibratedRotation = Eigen::Vector3d();
 		calibratedTranslation = Eigen::Vector3d();
 		calibratedScale = 1.0;
+		targetModelScale = 1.0;
+		hmdScale = 1.0;
 		relativeRotation = { 1, 0, 0, 0 };
 		relativeTranslation = { 0, 0, 0 };
 		validRelativeOffset = false;
