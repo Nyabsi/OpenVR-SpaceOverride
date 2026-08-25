@@ -39,40 +39,7 @@ This puts the headset and all your other lighthouse devices on the same tracking
 
 Once it's calibrated, the headset is driven entirely by the tracker, so if you don't need the SLAM devices you can disable the headset's own tracking too. This also means the override works fine with your headset set to 3DoF mode or with its positional tracking disabled.
 
-## Disable calibrated Offset
-
-> [!CAUTION]
-> Please **DO NOT** use this, unless you understand how to do a manual TrackingOverride, this is meant for **advanced** users and not for your average person, you should not have *any* reason to use this, unless you *know* what you are doing.
-
-Native Override feeds the raw tracker data, with the corrected offset applied, directly to the headset. This makes the headset behave as a truly native lighthouse device. The trade-off is yaw misalignment: the tracker's projection is different from your headset's, which is also why local space tracking is required.
-
-To set it up:
-
-1. Enable the **Disable calibrated Offset** option.
-2. Run the calibration.
-3. Stand up straight and rotate your body in a circle while recentering your **headset's** space (not SteamVR's) until you find the spot where the view lines up.
-4. Once aligned, you can optionally turn off the headset's own tracking entirely, and the pose never changes from that point on.
-
-> [!NOTE]
-> After a headset restart, you may need to redo the yaw alignment.
-
 ## Troubleshooting
-
-### My calibration feels odd / slightly off
-
-Re-run the calibration with a **slower calibration speed**. A rushed calibration is the most common cause of a bad offset, so take your time, move smoothly, and let it finish.
-
-### My trackers are gone / flew away after leaving headset unattended
-
-You should see an notification show up, follow the instructions to restore tracking.
-
-### My view is completely messed up!
-
-Your headset lost tracking it's tracking space, re-calibrate.
-
-### Being forced to look into one direction
-
-Don't launch OVR Advanced settings and try again.
 
 ### My controllers jump, then settle back
 
@@ -99,13 +66,6 @@ This is **not** TrackingOverride. TrackingOverride simply substitutes one device
 ### Does this conflict with OpenVR Space Calibrator?
 
 No. SpaceOverride does not conflict with Space Calibrator, you can have both installed. They solve the alignment problem differently, but having Space Calibrator present won't break the override.
-
-### Why are Tundra Trackers unusable?
-
-> [!IMPORTANT]
-> Tundra Tracker support is W.I.P and the issues cited below are being worked on, in future release Tundras will be compatible without any major issues.
-
-The mounted tracker drives your *entire headset pose*, so the tracker's quality directly becomes your view's quality. Tundra Trackers are known for jittery tracking, and jitter that's merely annoying on a hip or foot becomes nauseating when it's applied to your head. Use a Vive Tracker 3.0 or an equivalently stable device.
 
 ### Can wireless latency affect the pose?
 
