@@ -22,7 +22,7 @@ This puts the headset and all your other lighthouse devices on the same tracking
 | ALVR | ✅ Works | |
 | Meta Quest Link | ⚠️ Unconfirmed | Unconfirmed, let me know, email: nyabsi@sovellus.cc |
 | Air Link | ⚠️ Unconfirmed | Unconfirmed, let me know, email: nyabsi@sovellus.cc |
-| Steam Link | ✅ Works | |
+| Steam Link | ⚠️ Sub-optimal |  v9 has issues, v8 works OK. |
 | Display Port powered SLAM devices | ✅ Works | Such as: Pimax, PSVR2, HP Reverb G2, etc. |
 | VIVE Hub | ✅ Works | VIVE Focus Vision, via e-mail |
 
