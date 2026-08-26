@@ -29,19 +29,6 @@ This puts the headset and all your other lighthouse devices on the same tracking
 | Display Port powered SLAM devices | ✅ Works | Such as: Pimax, PSVR2, HP Reverb G2, etc. |
 | VIVE Hub | ✅ Works | VIVE Focus Vision, via e-mail |
 
-## Calibration Guide
-
-1. Mount a rigid tracker to your headset.
-2. Hit **Calibrate**. It goes through a few stages, and the on-screen text tells you what it wants at each one:
-    - First it asks you to **move your head around** so it can spot which tracker is the one mounted to your head.
-    - Then it calibrates. *Look left, Look center, Look right, Look center, Look up, Look center.*
-3. That's it. The profile saves on its own and the override stays running in the background.
-
-> [!TIP]
-> **Patience is key.** If the result feels odd or misaligned after calibrating, switch to a **slower calibration speed** and re-try. Slower calibration gives the solver more data to work with and almost always produces a better result.
-
-Once it's calibrated, the headset is driven entirely by the tracker, so if you don't need the SLAM devices you can disable the headset's own tracking too. This also means the override works fine with your headset set to 3DoF mode or with its positional tracking disabled.
-
 ## Troubleshooting
 
 ### My controllers jump, then settle back
@@ -82,7 +69,7 @@ You can use guide such as: [Link](https://www.notion.so/yeove/SteamVR-Hardware-T
 
 ## Acknowledgements
 
-This project uses/used substancial parts of [OpenVR Space Calibrator](https://github.com/pushrax/OpenVR-SpaceCalibrator). Huge thanks to [pushrax](https://github.com/pushrax) for their work, which this project builds on.
+This project uses/used substancial parts of [OpenVR Space Calibrator](https://github.com/pushrax/OpenVR-SpaceCalibrator). Huge thanks to [pushrax](https://github.com/pushrax) for their work, which this project used to build.
 
 ## License
 
