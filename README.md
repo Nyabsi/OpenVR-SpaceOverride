@@ -7,6 +7,9 @@ This puts the headset and all your other lighthouse devices on the same tracking
 > [!NOTE]
 > If you find bugs or issues, let me know over e-mail at `nyabsi@sovellus.cc` I will be responding to you when I have time. This software will receive updates on irregular basis but each update is guaranteed to improve the software in a way or another, thanks for using it even on it's current state.
 
+> [!TIP]
+> OpenVR-SpaceOverride **is not** OpenVR-SpaceCalibrator nor a *fork*, it uses a completely novel technique starting from v9. Older vesions had code used from space cal to workaround a technical limitation which has been resolved.
+
 ## Requirements
 
 - Lighthouse system (or other equivalent)
@@ -17,12 +20,12 @@ This puts the headset and all your other lighthouse devices on the same tracking
 
 | Streamer | Status | Notes |
 | --- | --- | --- |
-| PICO Connect | ⚠️ Sub-optimal |  v9 has issues, v8 works OK. |
+| PICO Connect | ✅ Works | |
 | Virtual Desktop | ✅ Works | |
 | ALVR | ✅ Works | |
 | Meta Quest Link | ⚠️ Unconfirmed | Unconfirmed, let me know, email: nyabsi@sovellus.cc |
 | Air Link | ⚠️ Unconfirmed | Unconfirmed, let me know, email: nyabsi@sovellus.cc |
-| Steam Link | ⚠️ Sub-optimal |  v9 has issues, v8 works OK. |
+| Steam Link | ✅ Works | |
 | Display Port powered SLAM devices | ✅ Works | Such as: Pimax, PSVR2, HP Reverb G2, etc. |
 | VIVE Hub | ✅ Works | VIVE Focus Vision, via e-mail |
 
