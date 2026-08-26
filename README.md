@@ -17,7 +17,7 @@ This puts the headset and all your other lighthouse devices on the same tracking
 
 | Streamer | Status | Notes |
 | --- | --- | --- |
-| PICO Connect | ✅ Works | |
+| PICO Connect | ⚠️ Sub-optimal |  v9 has issues, v8 works OK. |
 | Virtual Desktop | ✅ Works | |
 | ALVR | ✅ Works | |
 | Meta Quest Link | ⚠️ Unconfirmed | Unconfirmed, let me know, email: nyabsi@sovellus.cc |
